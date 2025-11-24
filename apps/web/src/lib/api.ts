@@ -90,6 +90,19 @@ export const customersAPI = {
   delete: (id: string) => api.delete(`/customers/${id}`),
 };
 
+// Quotes API
+export const quotesAPI = {
+  getAll: (params?: any) => api.get('/quotes', { params }),
+  getOne: (id: string) => api.get(`/quotes/${id}`),
+  create: (data: any) => api.post('/quotes', data),
+  update: (id: string, data: any) => api.patch(`/quotes/${id}`, data),
+  delete: (id: string) => api.delete(`/quotes/${id}`),
+  send: (id: string) => api.post(`/quotes/${id}/send`),
+  accept: (id: string) => api.post(`/quotes/${id}/accept`),
+  reject: (id: string) => api.post(`/quotes/${id}/reject`),
+  generatePDF: (id: string) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }),
+};
+
 // Bookings API
 export const bookingsAPI = {
   getAll: (params?: any) => api.get('/bookings', { params }),

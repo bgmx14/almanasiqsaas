@@ -120,8 +120,7 @@ export const createQuoteSchema = z.object({
   title: z.string().min(3, 'Le titre doit contenir au moins 3 caractères'),
   description: z.string().optional(),
   items: z.array(z.object({
-    name: z.string(),
-    description: z.string().optional(),
+    description: z.string().min(1, 'La description est requise'),
     quantity: z.number().int().positive(),
     unitPrice: z.number().positive(),
     total: z.number().positive(),
@@ -131,6 +130,7 @@ export const createQuoteSchema = z.object({
   discount: z.number().nonnegative().default(0),
   total: z.number().positive(),
   validUntil: z.string(),
+  status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'ACCEPTED', 'REJECTED', 'EXPIRED']).optional(),
 });
 
 export const updateQuoteSchema = createQuoteSchema.partial().extend({
