@@ -136,4 +136,17 @@ export const dashboardAPI = {
   getLeadsChart: (period?: string) => api.get('/dashboard/leads', { params: { period } }),
 };
 
+// Documents API
+export const documentsAPI = {
+  getAll: (params?: any) => api.get('/documents', { params }),
+  getOne: (id: string) => api.get(`/documents/${id}`),
+  upload: (formData: FormData) => api.post('/documents', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  update: (id: string, data: any) => api.patch(`/documents/${id}`, data),
+  delete: (id: string) => api.delete(`/documents/${id}`),
+  verify: (id: string) => api.post(`/documents/${id}/verify`),
+  reject: (id: string, reason: string) => api.post(`/documents/${id}/reject`, { reason }),
+};
+
 export default api;

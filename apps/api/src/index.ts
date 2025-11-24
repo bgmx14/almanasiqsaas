@@ -13,6 +13,7 @@ import { notFoundHandler } from './middleware/notFoundHandler';
 import { rateLimiter } from './middleware/rateLimiter';
 import { logger } from './utils/logger';
 import { EmailService } from './services/email.service';
+import { StorageService } from './services/storage.service';
 import routes from './routes';
 
 const app = express();
@@ -48,6 +49,9 @@ if (process.env.NODE_ENV === 'development') {
 
 // Rate limiting
 app.use('/api/', rateLimiter);
+
+// Serve uploaded files
+app.use('/uploads', express.static(process.env.UPLOAD_DIR || 'uploads'));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -90,10 +94,18 @@ app.use(errorHandler);
 // Start server
 const PORT = process.env.PORT || 5000;
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   logger.info(`🚀 OmraFlow API server running on port ${PORT}`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 API URL: ${process.env.API_URL || `http://localhost:${PORT}`}`);
+
+  // Initialize storage service
+  try {
+    await StorageService.initialize();
+    logger.info('📁 Storage service initialized');
+  } catch (error) {
+    logger.error('❌ Failed to initialize storage service:', error);
+  }
 
   // Initialize email service
   const emailConfigured = EmailService.initialize();
