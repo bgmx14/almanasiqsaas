@@ -1,0 +1,1129 @@
+// OmraFlow Pro - Prisma Schema
+// Multi-tenant SaaS for Omra Agency Management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// TENANTS & USERS (Multi-tenancy & Authentication)
+// ============================================================================
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  domain    String?  @unique // Custom domain
+  logo      String?
+  settings  Json     @default("{}")
+
+  // Subscription
+  subscriptionPlan   SubscriptionPlan @default(STARTER)
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  trialEndsAt        DateTime?
+  subscriptionEndsAt DateTime?
+
+  // Billing
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+
+  // Status
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users             User[]
+  customers         Customer[]
+  leads             Lead[]
+  bookings          Booking[]
+  packages          Package[]
+  groups            Group[]
+  payments          Payment[]
+  invoices          Invoice[]
+  documents         Document[]
+  suppliers         Supplier[]
+  supplierBookings  SupplierBooking[]
+  communications    Communication[]
+  notifications     Notification[]
+  reviews           Review[]
+  tasks             Task[]
+  workflows         Workflow[]
+  templates         Template[]
+  campaigns         Campaign[]
+
+  @@index([slug])
+  @@index([domain])
+  @@map("tenants")
+}
+
+enum SubscriptionPlan {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  PAUSED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  email     String
+  password  String   // Hashed with bcrypt
+  firstName String
+  lastName  String
+  phone     String?
+  avatar    String?
+
+  role      UserRole @default(AGENT)
+  permissions Json   @default("[]")
+
+  // Auth
+  isActive       Boolean   @default(true)
+  emailVerified  Boolean   @default(false)
+  lastLoginAt    DateTime?
+  passwordResetToken String?
+  passwordResetExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assignedLeads        Lead[]
+  assignedTasks        Task[]
+  communications       Communication[]
+  notifications        Notification[]
+  createdCampaigns     Campaign[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  COMMERCIAL
+  ACCOUNTANT
+  AGENT
+  GUIDE
+}
+
+// ============================================================================
+// CRM & LEADS
+// ============================================================================
+
+model Lead {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Personal info
+  firstName String
+  lastName  String
+  email     String?
+  phone     String
+  dateOfBirth DateTime?
+
+  // Lead details
+  status    LeadStatus @default(NEW)
+  source    String?    // 'website', 'facebook', 'referral', etc.
+  score     Int        @default(0) // Lead scoring 0-100
+
+  // Preferences
+  budget            Float?
+  numberOfPilgrims  Int       @default(1)
+  preferredDate     DateTime?
+  preferredPackage  String?
+  notes             String?
+  tags              Json      @default("[]")
+
+  // Assignment
+  assignedToId String?
+  assignedTo   User?   @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  // Tracking
+  lastContactedAt DateTime?
+  convertedAt     DateTime?
+  customerId      String?   @unique
+  customer        Customer? @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  communications Communication[]
+  quotes         Quote[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+model Quote {
+  id        String   @id @default(uuid())
+  tenantId  String
+
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  // Quote details
+  quoteNumber String   @unique
+  title       String
+  description String?
+  items       Json     // Array of line items
+  subtotal    Float
+  tax         Float    @default(0)
+  discount    Float    @default(0)
+  total       Float
+
+  validUntil  DateTime
+  status      QuoteStatus @default(DRAFT)
+
+  // Tracking
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  acceptedAt  DateTime?
+  rejectedAt  DateTime?
+
+  // Conversion
+  bookingId   String?  @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([quoteNumber])
+  @@index([status])
+  @@map("quotes")
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+// ============================================================================
+// CUSTOMERS (Pilgrims)
+// ============================================================================
+
+model Customer {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Personal information
+  firstName String
+  lastName  String
+  email     String?
+  phone     String
+  dateOfBirth DateTime?
+  gender    Gender?
+  nationality String?
+
+  // Address
+  address   String?
+  city      String?
+  zipCode   String?
+  country   String?
+
+  // Passport
+  passportNumber   String?
+  passportExpiry   DateTime?
+  passportCountry  String?
+
+  // Emergency contact
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyRelation     String?
+
+  // Medical & preferences
+  medicalConditions String?
+  dietaryRestrictions String?
+  mobilityIssues    Boolean @default(false)
+
+  // Marketing
+  source    String? // How they found the agency
+  tags      Json    @default("[]")
+  notes     String?
+
+  // Conversion
+  leadId    String?  @unique
+  lead      Lead?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings       Booking[]
+  documents      Document[]
+  communications Communication[]
+  notifications  Notification[]
+  reviews        Review[]
+  quotes         Quote[]
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([phone])
+  @@index([passportNumber])
+  @@map("customers")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+// ============================================================================
+// PACKAGES & BOOKINGS
+// ============================================================================
+
+model Package {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  type        PackageType
+  duration    Int      // Number of days
+
+  // Pricing
+  basePrice   Float
+  currency    String   @default("EUR")
+
+  // Capacity
+  maxCapacity Int?
+
+  // Inclusions (JSON array)
+  inclusions  Json     @default("[]")
+  exclusions  Json     @default("[]")
+
+  // Status
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings Booking[]
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([isActive])
+  @@map("packages")
+}
+
+enum PackageType {
+  OMRA_STANDARD
+  OMRA_RAMADAN
+  OMRA_VIP
+  OMRA_COMBINED
+  OMRA_WOMEN_ONLY
+  OMRA_FAMILY
+  CUSTOM
+}
+
+model Booking {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  bookingNumber String @unique
+
+  // Relations
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  packageId  String
+  package    Package  @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  groupId    String?
+  group      Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  // Dates
+  departureDate DateTime
+  returnDate    DateTime
+
+  // Pricing
+  totalAmount   Float
+  paidAmount    Float    @default(0)
+  balanceDue    Float
+  currency      String   @default("EUR")
+
+  // Status
+  status        BookingStatus @default(PENDING)
+
+  // Contract
+  contractSigned   Boolean   @default(false)
+  contractSignedAt DateTime?
+  contractUrl      String?
+
+  // Room assignment
+  roomNumber       String?
+  roomType         String?
+  roommateId       String?
+
+  // Special requirements
+  specialRequests  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  payments  Payment[]
+  invoices  Invoice[]
+  documents Document[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([groupId])
+  @@index([status])
+  @@index([departureDate])
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  PAYMENT_PENDING
+  PAID
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+  REFUNDED
+}
+
+model Group {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+
+  // Dates
+  departureDate DateTime
+  returnDate    DateTime
+
+  // Capacity
+  maxCapacity   Int
+  currentCount  Int      @default(0)
+
+  // Guide/Mutawwif
+  guideId       String?
+  guideName     String?
+  guidePhone    String?
+
+  // Status
+  status        GroupStatus @default(OPEN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings         Booking[]
+  supplierBookings SupplierBooking[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([departureDate])
+  @@map("groups")
+}
+
+enum GroupStatus {
+  OPEN
+  FULL
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+// ============================================================================
+// PAYMENTS & INVOICING
+// ============================================================================
+
+model Payment {
+  id        String   @id @default(uuid())
+  tenantId  String
+
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  amount       Float
+  currency     String   @default("EUR")
+  method       PaymentMethod
+  status       PaymentStatus @default(PENDING)
+
+  // External payment details
+  transactionId     String?  @unique
+  stripePaymentId   String?
+  paymentIntentId   String?
+
+  // Metadata
+  reference    String?
+  notes        String?
+
+  // Dates
+  dueDate      DateTime?
+  paidAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@index([status])
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  CHECK
+  CASH
+  PAYPAL
+  APPLE_PAY
+  GOOGLE_PAY
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+model Invoice {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  invoiceNumber String   @unique
+
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  // Amounts
+  subtotal  Float
+  tax       Float    @default(0)
+  discount  Float    @default(0)
+  total     Float
+  currency  String   @default("EUR")
+
+  // Dates
+  issueDate DateTime @default(now())
+  dueDate   DateTime
+  paidDate  DateTime?
+
+  status    InvoiceStatus @default(DRAFT)
+
+  // PDF
+  pdfUrl    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([invoiceNumber])
+  @@index([bookingId])
+  @@index([status])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PAID
+  OVERDUE
+  CANCELED
+  REFUNDED
+}
+
+// ============================================================================
+// DOCUMENTS & VISA
+// ============================================================================
+
+model Document {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  type       DocumentType
+  name       String
+  fileUrl    String
+  fileSize   Int?
+  mimeType   String?
+
+  // Metadata extracted (e.g., from passport OCR)
+  metadata   Json     @default("{}")
+
+  // Status
+  status     DocumentStatus @default(PENDING)
+  verifiedAt DateTime?
+  verifiedBy String?
+  rejectionReason String?
+
+  // Visa specific
+  visaNumber      String?
+  visaIssueDate   DateTime?
+  visaExpiryDate  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([bookingId])
+  @@index([type])
+  @@index([status])
+  @@map("documents")
+}
+
+enum DocumentType {
+  PASSPORT
+  VISA
+  PHOTO
+  VACCINATION_CERTIFICATE
+  INSURANCE
+  FLIGHT_TICKET
+  HOTEL_VOUCHER
+  CONTRACT
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+// ============================================================================
+// SUPPLIERS & PURCHASES
+// ============================================================================
+
+model Supplier {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name      String
+  type      SupplierType
+
+  // Contact
+  contactName  String?
+  email        String?
+  phone        String?
+  address      String?
+
+  // Business
+  contractTerms String?
+  paymentTerms  String?
+  rating        Float?   @default(0)
+
+  notes     String?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings SupplierBooking[]
+
+  @@index([tenantId])
+  @@index([type])
+  @@map("suppliers")
+}
+
+enum SupplierType {
+  AIRLINE
+  HOTEL_MECCA
+  HOTEL_MEDINA
+  TRANSPORT
+  GUIDE
+  RESTAURANT
+  INSURANCE
+  OTHER
+}
+
+model SupplierBooking {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  groupId    String?
+  group      Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  type       SupplierBookingType
+  details    Json     // Flexible JSON for different booking types
+
+  // Costs
+  cost       Float
+  currency   String   @default("EUR")
+
+  status     SupplierBookingStatus @default(PENDING)
+
+  // Dates
+  bookingDate DateTime @default(now())
+  serviceDate DateTime?
+
+  // Reference
+  referenceNumber String?
+  confirmationNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([supplierId])
+  @@index([groupId])
+  @@index([status])
+  @@map("supplier_bookings")
+}
+
+enum SupplierBookingType {
+  FLIGHT
+  HOTEL
+  TRANSPORT
+  GUIDE
+  MEAL
+  OTHER
+}
+
+enum SupplierBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+  COMPLETED
+}
+
+// ============================================================================
+// COMMUNICATIONS
+// ============================================================================
+
+model Communication {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  type       CommunicationType
+  direction  CommunicationDirection
+  channel    CommunicationChannel
+
+  // Content
+  subject    String?
+  body       String
+  attachments Json    @default("[]")
+
+  // Status
+  status     CommunicationStatus @default(SENT)
+  sentAt     DateTime?
+  deliveredAt DateTime?
+  readAt     DateTime?
+  failedAt   DateTime?
+  errorMessage String?
+
+  // External IDs
+  externalId String? // e.g., Twilio message SID, email message ID
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("communications")
+}
+
+enum CommunicationType {
+  EMAIL
+  SMS
+  WHATSAPP
+  CALL
+  NOTE
+  MEETING
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommunicationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  PHONE
+  IN_PERSON
+  INTERNAL
+}
+
+enum CommunicationStatus {
+  DRAFT
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  BOUNCED
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type       NotificationType
+  title      String
+  message    String
+  data       Json     @default("{}")
+
+  // Channels
+  channels   Json     @default("[]") // ['email', 'sms', 'push']
+
+  // Status
+  readAt     DateTime?
+  sentAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([customerId])
+  @@index([readAt])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  PAYMENT_RECEIVED
+  PAYMENT_DUE
+  DOCUMENT_UPLOADED
+  DOCUMENT_VERIFIED
+  VISA_APPROVED
+  DEPARTURE_REMINDER
+  TASK_ASSIGNED
+  MESSAGE_RECEIVED
+  REVIEW_REQUEST
+  SYSTEM
+}
+
+// ============================================================================
+// REVIEWS & REPUTATION
+// ============================================================================
+
+model Review {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Ratings (1-5 stars)
+  overallRating    Int
+  flightRating     Int?
+  hotelRating      Int?
+  guideRating      Int?
+  organizationRating Int?
+
+  // Content
+  title      String?
+  comment    String?
+
+  // NPS
+  npsScore   Int? // 0-10
+
+  // Status
+  isPublic   Boolean  @default(false)
+  isVerified Boolean  @default(false)
+
+  // Response
+  responded      Boolean  @default(false)
+  responseText   String?
+  respondedAt    DateTime?
+
+  // External platforms
+  publishedToGoogle    Boolean @default(false)
+  publishedToFacebook  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([overallRating])
+  @@map("reviews")
+}
+
+// ============================================================================
+// TASKS & WORKFLOWS
+// ============================================================================
+
+model Task {
+  id        String   @id @default(uuid())
+  tenantId  String
+
+  title       String
+  description String?
+
+  // Assignment
+  assignedToId String?
+  assignedTo   User?   @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  // Related entities
+  relatedType  String? // 'customer', 'booking', 'lead', etc.
+  relatedId    String?
+
+  // Status
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+
+  // Dates
+  dueDate      DateTime?
+  completedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Workflow {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  trigger     WorkflowTrigger
+  conditions  Json     @default("[]")
+  actions     Json     @default("[]")
+
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([trigger])
+  @@map("workflows")
+}
+
+enum WorkflowTrigger {
+  LEAD_CREATED
+  BOOKING_CONFIRMED
+  PAYMENT_RECEIVED
+  DOCUMENT_UPLOADED
+  DAYS_BEFORE_DEPARTURE
+  AFTER_RETURN
+  CUSTOM
+}
+
+// ============================================================================
+// TEMPLATES & CAMPAIGNS
+// ============================================================================
+
+model Template {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        TemplateType
+  subject     String?
+  body        String
+  variables   Json     @default("[]")
+
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([type])
+  @@map("templates")
+}
+
+enum TemplateType {
+  EMAIL
+  SMS
+  WHATSAPP
+  CONTRACT
+  INVOICE
+  QUOTE
+}
+
+model Campaign {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        CampaignType
+  status      CampaignStatus @default(DRAFT)
+
+  // Targeting
+  targetSegment Json   @default("{}")
+
+  // Content
+  templateId  String?
+  subject     String?
+  content     String
+
+  // Scheduling
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  completedAt  DateTime?
+
+  // Stats
+  totalRecipients   Int @default(0)
+  totalSent         Int @default(0)
+  totalDelivered    Int @default(0)
+  totalOpened       Int @default(0)
+  totalClicked      Int @default(0)
+  totalFailed       Int @default(0)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+enum CampaignType {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELED
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+
+  userId    String?
+  userEmail String?
+
+  action    String   // 'create', 'update', 'delete'
+  entity    String   // 'booking', 'payment', etc.
+  entityId  String
+
+  changes   Json     @default("{}")
+  metadata  Json     @default("{}")
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

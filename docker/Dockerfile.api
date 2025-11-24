@@ -1,0 +1,21 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+COPY turbo.json ./
+COPY packages/ ./packages/
+COPY apps/api/ ./apps/api/
+
+RUN npm install
+
+# Generate Prisma client
+WORKDIR /app/packages/database
+RUN npx prisma generate
+
+WORKDIR /app
+
+EXPOSE 5000
+
+CMD ["npm", "run", "dev", "--workspace=@omraflow/api"]

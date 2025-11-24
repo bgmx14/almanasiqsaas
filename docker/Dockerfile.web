@@ -1,0 +1,17 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+COPY turbo.json ./
+COPY packages/ ./packages/
+COPY apps/web/ ./apps/web/
+
+RUN npm install
+
+WORKDIR /app
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev", "--workspace=@omraflow/web"]
