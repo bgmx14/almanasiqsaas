@@ -112,6 +112,15 @@ export const bookingsAPI = {
   delete: (id: string) => api.delete(`/bookings/${id}`),
 };
 
+// Packages API
+export const packagesAPI = {
+  getAll: (params?: any) => api.get('/packages', { params }),
+  getOne: (id: string) => api.get(`/packages/${id}`),
+  create: (data: any) => api.post('/packages', data),
+  update: (id: string, data: any) => api.patch(`/packages/${id}`, data),
+  delete: (id: string) => api.delete(`/packages/${id}`),
+};
+
 // Payments API
 export const paymentsAPI = {
   getAll: (params?: any) => api.get('/payments', { params }),
