@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { createQuoteSchema, updateQuoteSchema } from '@omraflow/shared/validators';
 import { AppError } from '@omraflow/shared/types';
 import { PDFService } from '../services/pdf.service';
+import { EmailService } from '../services/email.service';
 
 const router = Router();
 router.use(authenticate);
@@ -350,6 +351,7 @@ router.post('/:id/send', async (req, res, next) => {
             firstName: true,
             lastName: true,
             email: true,
+            phone: true,
           },
         },
         customer: {
@@ -358,19 +360,81 @@ router.post('/:id/send', async (req, res, next) => {
             firstName: true,
             lastName: true,
             email: true,
+            phone: true,
+          },
+        },
+        tenant: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
           },
         },
       },
     });
 
-    // TODO: Send email with quote PDF
-    // await emailService.sendQuote(updatedQuote);
+    // Determine client (lead or customer)
+    const client = updatedQuote.customer || updatedQuote.lead;
+    if (!client || !client.email) {
+      return res.json({
+        success: true,
+        data: updatedQuote,
+        message: 'Devis marqué comme envoyé (email non disponible)',
+      });
+    }
 
-    res.json({
-      success: true,
-      data: updatedQuote,
-      message: 'Devis envoyé avec succès',
-    });
+    // Send email with quote PDF
+    if (EmailService.isConfigured()) {
+      try {
+        await EmailService.sendQuoteEmail({
+          quote: {
+            id: updatedQuote.id,
+            quoteNumber: updatedQuote.quoteNumber,
+            title: updatedQuote.title,
+            total: updatedQuote.total,
+            validUntil: updatedQuote.validUntil,
+            status: updatedQuote.status,
+            items: Array.isArray(updatedQuote.items) ? updatedQuote.items : [],
+            subtotal: updatedQuote.subtotal,
+            tax: updatedQuote.tax,
+            discount: updatedQuote.discount,
+            description: updatedQuote.description || undefined,
+            createdAt: updatedQuote.createdAt,
+          },
+          client: {
+            firstName: client.firstName,
+            lastName: client.lastName,
+            email: client.email,
+            phone: client.phone || undefined,
+          },
+          tenant: {
+            name: updatedQuote.tenant.name,
+            email: updatedQuote.tenant.email || undefined,
+            phone: updatedQuote.tenant.phone || undefined,
+          },
+        });
+
+        res.json({
+          success: true,
+          data: updatedQuote,
+          message: 'Devis envoyé avec succès par email',
+        });
+      } catch (emailError) {
+        // Log error but don't fail the request
+        console.error('Error sending email:', emailError);
+        res.json({
+          success: true,
+          data: updatedQuote,
+          message: 'Devis marqué comme envoyé (erreur lors de l\'envoi de l\'email)',
+        });
+      }
+    } else {
+      res.json({
+        success: true,
+        data: updatedQuote,
+        message: 'Devis marqué comme envoyé (service email non configuré)',
+      });
+    }
   } catch (error) {
     next(error);
   }

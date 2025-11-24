@@ -12,6 +12,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { rateLimiter } from './middleware/rateLimiter';
 import { logger } from './utils/logger';
+import { EmailService } from './services/email.service';
 import routes from './routes';
 
 const app = express();
@@ -93,6 +94,14 @@ httpServer.listen(PORT, () => {
   logger.info(`🚀 OmraFlow API server running on port ${PORT}`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 API URL: ${process.env.API_URL || `http://localhost:${PORT}`}`);
+
+  // Initialize email service
+  const emailConfigured = EmailService.initialize();
+  if (emailConfigured) {
+    logger.info('✉️  Email service configured and ready');
+  } else {
+    logger.warn('⚠️  Email service not configured (SMTP credentials missing)');
+  }
 });
 
 // Graceful shutdown
