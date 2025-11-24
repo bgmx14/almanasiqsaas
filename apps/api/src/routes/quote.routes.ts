@@ -3,6 +3,7 @@ import { prisma } from '@omraflow/database';
 import { authenticate } from '../middleware/auth';
 import { createQuoteSchema, updateQuoteSchema } from '@omraflow/shared/validators';
 import { AppError } from '@omraflow/shared/types';
+import { PDFService } from '../services/pdf.service';
 
 const router = Router();
 router.use(authenticate);
@@ -489,6 +490,94 @@ router.post('/:id/reject', async (req, res, next) => {
       data: updatedQuote,
       message: 'Devis rejeté',
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate quote PDF
+router.get('/:id/pdf', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const quote = await prisma.quote.findFirst({
+      where: { id, tenantId: req.user!.tenantId },
+      include: {
+        lead: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        customer: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        tenant: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    if (!quote) {
+      throw new AppError(404, 'QUOTE_NOT_FOUND', 'Devis introuvable');
+    }
+
+    // Determine client (lead or customer)
+    const client = quote.customer || quote.lead;
+    if (!client) {
+      throw new AppError(400, 'NO_CLIENT', 'Aucun client associé à ce devis');
+    }
+
+    // Parse items from JSON
+    const items = Array.isArray(quote.items) ? quote.items : [];
+
+    // Generate PDF
+    const pdfStream = PDFService.generateQuotePDF({
+      quoteNumber: quote.quoteNumber,
+      date: quote.createdAt,
+      validUntil: quote.validUntil,
+      status: quote.status,
+      client: {
+        firstName: client.firstName,
+        lastName: client.lastName,
+        email: client.email || undefined,
+        phone: client.phone || undefined,
+      },
+      tenant: {
+        name: quote.tenant.name,
+        email: quote.tenant.email || undefined,
+        phone: quote.tenant.phone || undefined,
+      },
+      items: items.map((item: any) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      })),
+      subtotal: quote.subtotal,
+      tax: quote.tax,
+      discount: quote.discount,
+      total: quote.total,
+      notes: quote.description || undefined,
+    });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="devis-${quote.quoteNumber}.pdf"`);
+
+    // Pipe the PDF to the response
+    pdfStream.pipe(res);
   } catch (error) {
     next(error);
   }
