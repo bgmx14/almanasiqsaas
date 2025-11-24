@@ -104,7 +104,9 @@ export const createPaymentSchema = z.object({
   bookingId: z.string().uuid('ID réservation invalide'),
   amount: z.number().positive('Le montant doit être positif'),
   method: z.enum(['CARD', 'BANK_TRANSFER', 'CHECK', 'CASH', 'PAYPAL', 'APPLE_PAY', 'GOOGLE_PAY']),
+  status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED', 'CANCELED']).optional(),
   dueDate: z.string().optional(),
+  paidAt: z.string().optional(),
   reference: z.string().optional(),
   notes: z.string().optional(),
 });
