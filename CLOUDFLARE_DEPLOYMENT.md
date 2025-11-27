@@ -151,6 +151,44 @@ jobs:
 
 ## 🐛 Troubleshooting
 
+### Cloudflare using npm instead of pnpm
+
+**Problem**: Build logs show `npm@10.2.3` instead of pnpm
+
+**Symptoms**:
+```
+Detected the following tools from environment: npm@10.2.3
+Installing project dependencies: npm clean-install
+```
+
+**Solution Option 1** (Recommended): Use custom build script
+```bash
+# In Cloudflare Pages dashboard, set:
+Build command: bash build-cloudflare.sh
+```
+
+**Solution Option 2**: Configure build settings in Cloudflare Pages dashboard:
+1. Go to your Cloudflare Pages project
+2. Settings → Builds & deployments
+3. Edit configuration:
+   - Framework preset: **None** (or Next.js if available with pnpm)
+   - Build command: `npx pnpm install && npx pnpm run build:web`
+   - Build output directory: `apps/web/.next`
+
+**Solution Option 3**: Add to build command:
+```bash
+npm install -g pnpm@8.15.0 && pnpm install && pnpm run build:web
+```
+
+### TypeScript errors during build
+
+**Problem**: `error TS7006: Parameter implicitly has an 'any' type`
+
+**Solution**: Already fixed in latest commit. Pull latest changes:
+```bash
+git pull origin main
+```
+
 ### Build Fails with "Module not found"
 
 **Problem**: Turborepo can't find workspace packages
@@ -162,16 +200,15 @@ packages:
   - 'packages/*'
 ```
 
-### Build Fails with "pnpm not found"
+### Building wrong packages (API + Web instead of just Web)
 
-**Problem**: Cloudflare doesn't detect pnpm
+**Problem**: Build command is `npm run build` which builds all packages
 
-**Solution**: Add `packageManager` field in root `package.json`:
-```json
-{
-  "packageManager": "pnpm@8.15.0"
-}
+**Solution**: Change build command to:
+```bash
+pnpm run build:web
 ```
+This only builds the frontend, saving time and avoiding API/database build errors.
 
 ### API URL not working
 

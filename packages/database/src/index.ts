@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -27,7 +28,7 @@ export function setTenantContext(tenantId: string) {
 export function createTenantAwareClient(tenantId: string) {
   const client = new PrismaClient();
 
-  client.$use(async (params, next) => {
+  client.$use(async (params: Prisma.MiddlewareParams, next: (params: Prisma.MiddlewareParams) => Promise<any>) => {
     // Automatically add tenantId to create operations
     if (params.action === 'create' || params.action === 'createMany') {
       if (params.args.data) {
