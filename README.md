@@ -75,7 +75,8 @@ omraflow-pro/
 
 ### Prérequis
 
-- Node.js 18+
+- Node.js 18.20.0+ (voir `.nvmrc`)
+- pnpm 8.15.0+
 - PostgreSQL 15+
 - Redis
 - Docker & Docker Compose (optionnel)
@@ -83,31 +84,82 @@ omraflow-pro/
 ### Installation
 
 ```bash
+# Installer pnpm si nécessaire
+npm install -g pnpm
+
 # Installer les dépendances
-npm install
+pnpm install
 
 # Copier les variables d'environnement
-cp .env.example .env
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 
 # Configurer la base de données
 cd packages/database
-npx prisma migrate dev
-npx prisma generate
+pnpm prisma migrate dev
+pnpm prisma generate
+
+# Retourner à la racine
+cd ../..
 
 # Lancer en mode développement
-npm run dev
+pnpm dev
 ```
 
 ### Scripts disponibles
 
 ```bash
-npm run dev        # Lancer tous les services en dev
-npm run build      # Build de production
-npm run test       # Lancer les tests
-npm run lint       # Linter le code
-npm run format     # Formater le code
-npm run typecheck  # Vérifier les types TypeScript
+pnpm dev           # Lancer tous les services en dev
+pnpm build         # Build de production (tous les packages)
+pnpm build:web     # Build uniquement le frontend
+pnpm test          # Lancer les tests
+pnpm lint          # Linter le code
+pnpm format        # Formater le code
+pnpm typecheck     # Vérifier les types TypeScript
+pnpm clean         # Nettoyer les builds et node_modules
 ```
+
+### Pourquoi pnpm?
+
+- ⚡ **Plus rapide**: Jusqu'à 2x plus rapide que npm
+- 💾 **Économie d'espace**: Stockage global avec liens symboliques
+- 🔒 **Sécurité**: Dépendances strictes sans hoisting
+- 🎯 **Monorepo**: Support natif des workspaces
+
+## 🚢 Déploiement
+
+### Frontend (Cloudflare Pages)
+
+Le frontend Next.js peut être déployé sur Cloudflare Pages. Voir [CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md) pour le guide complet.
+
+**Résumé rapide**:
+```bash
+# Build command
+pnpm run build:web
+
+# Build output directory
+apps/web/.next
+
+# Node version
+18.20.0
+```
+
+**Variables d'environnement requises**:
+- `NEXT_PUBLIC_API_URL`: URL de votre API backend
+
+### Backend (API)
+
+Le backend Express peut être déployé sur:
+- VPS (DigitalOcean, Linode, etc.)
+- Containers (Docker, Kubernetes)
+- PaaS (Heroku, Railway, Render)
+- Cloud (AWS EC2, Google Cloud Run)
+
+**Prérequis**:
+- PostgreSQL 15+ database
+- Redis instance
+- SMTP server (pour les emails)
+- File storage (local ou S3)
 
 ## 📈 Business Model
 

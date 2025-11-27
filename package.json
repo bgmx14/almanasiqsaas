@@ -3,13 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "SaaS platform for Omra agency management",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:web": "turbo run build --filter=@omraflow/web",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
@@ -23,7 +20,7 @@
   },
   "engines": {
     "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "pnpm": ">=8.0.0"
   },
-  "packageManager": "npm@10.2.3"
+  "packageManager": "pnpm@8.15.0"
 }
